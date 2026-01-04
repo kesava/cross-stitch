@@ -20,6 +20,7 @@ const patternCanvas = document.getElementById('patternCanvas');
 const progress = document.getElementById('progress');
 const downloadBtn = document.getElementById('downloadBtn');
 const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+const downloadPngBtn = document.getElementById('downloadPngBtn');
 const newImageBtn = document.getElementById('newImageBtn');
 
 // Controls
@@ -413,6 +414,7 @@ async function generatePattern() {
 
     downloadBtn.disabled = true;
     downloadJsonBtn.disabled = true;
+    downloadPngBtn.disabled = true;
     progress.textContent = 'Processing...';
 
     const gridSize = parseInt(gridSizeInput.value);
@@ -441,6 +443,7 @@ async function generatePattern() {
     progress.textContent = '';
     downloadBtn.disabled = false;
     downloadJsonBtn.disabled = false;
+    downloadPngBtn.disabled = false;
 
     // Show zoom controls
     zoomControls.style.display = 'flex';
@@ -527,6 +530,21 @@ downloadJsonBtn.addEventListener('click', () => {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+});
+
+downloadPngBtn.addEventListener('click', () => {
+    if (!currentPattern) return;
+
+    patternCanvas.toBlob((blob) => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'cross-stitch-pattern.png';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 'image/png');
 });
 
 // ===== Zoom Controls =====

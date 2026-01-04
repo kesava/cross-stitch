@@ -126,6 +126,41 @@ export function App() {
         URL.revokeObjectURL(url);
     };
 
+    const downloadPNG = () => {
+        if (!pattern) return;
+
+        // Create a temporary canvas
+        const canvas = document.createElement('canvas');
+        const stitchSize = 10;
+        canvas.width = pattern.width * stitchSize;
+        canvas.height = pattern.height * stitchSize;
+        const ctx = canvas.getContext('2d');
+
+        // Create an image from the SVG
+        const svgBlob = new Blob([pattern.svg], { type: 'image/svg+xml;charset=utf-8' });
+        const url = URL.createObjectURL(svgBlob);
+        const img = new Image();
+
+        img.onload = () => {
+            ctx.drawImage(img, 0, 0);
+            URL.revokeObjectURL(url);
+
+            // Convert canvas to PNG blob and download
+            canvas.toBlob((blob) => {
+                const pngUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = pngUrl;
+                a.download = 'cross-stitch-pattern.png';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(pngUrl);
+            }, 'image/png');
+        };
+
+        img.src = url;
+    };
+
     return html`
         <div className="app-container">
             <div className="thread-decoration top-left"></div>
@@ -163,6 +198,7 @@ export function App() {
                             progress=${progress}
                             onDownload=${downloadSVG}
                             onDownloadOpenFormat=${downloadOpenFormat}
+                            onDownloadPNG=${downloadPNG}
                         />
                     </div>
                 <//>

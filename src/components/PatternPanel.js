@@ -6,7 +6,7 @@ const { useState, useEffect, useRef } = React;
  * PatternPanel Component
  * Shows the generated cross-stitch pattern with zoom controls and download buttons
  */
-export function PatternPanel({ pattern, isConverting, progress, onDownload, onDownloadOpenFormat }) {
+export function PatternPanel({ pattern, isConverting, progress, onDownload, onDownloadOpenFormat, onDownloadPNG }) {
     const [zoom, setZoom] = useState(1);
     const [baseScale, setBaseScale] = useState(1);
     const containerRef = useRef(null);
@@ -94,6 +94,13 @@ export function PatternPanel({ pattern, isConverting, progress, onDownload, onDo
                                 <path d="M14 14H2v-2h12v2z" />
                             </svg>
                             Download Pattern (JSON)
+                        </button>
+                        <button className="download-btn" onClick=${onDownloadPNG}>
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+                                <path d="M8 12L3 7h3V1h4v6h3L8 12z" />
+                                <path d="M14 14H2v-2h12v2z" />
+                            </svg>
+                            Download PNG
                         </button>
                     </div>
                 <//>
