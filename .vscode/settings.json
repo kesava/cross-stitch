@@ -1,0 +1,15 @@
+{
+    "workbench.colorCustomizations": {
+        "editor.fontLigatures": true,
+        "activityBar.background": "#131212",
+        "sideBar.background": "#1e1e1e",
+        "statusBar.noFolderBackground": "#131212",
+        "statusBar.debuggingBackground": "#8b0000",
+        "tab.activeBackground": "#1e1e1e",
+        "tab.inactiveBackground": "#2d2d2d",
+        "tab.border": "#131212",
+        "tab.activeBorderTop": "#6bb8e6",
+        "tab.unfocusedActiveBorder": "#6bb8e6",
+        "tab.unfocusedActiveBorderTop": "#6bb8e6"
+    }
+}
