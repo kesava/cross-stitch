@@ -1,0 +1,23 @@
+{
+  "name": "cross-stitch",
+  "version": "1.0.0",
+  "type": "module",
+  "homepage": "https://kesava.github.io/cross-stitch",
+  "main": "index.js",
+  "scripts": {
+    "build": "babel src --out-dir dist --extensions '.js' --presets @babel/preset-react",
+    "dev": "python3 -m http.server 8000",
+    "predeploy": "echo 'Preparing for deployment...'",
+    "deploy": "gh-pages -d .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "Cross-stitch pattern generator from images using DMC colors",
+  "devDependencies": {
+    "@babel/cli": "^7.23.0",
+    "@babel/core": "^7.23.0",
+    "@babel/preset-react": "^7.23.0",
+    "gh-pages": "^6.1.0"
+  }
+}
