@@ -32,6 +32,11 @@ const toleranceValue = document.getElementById('toleranceValue');
 const toleranceControl = document.getElementById('toleranceControl');
 const bgColorIndicator = document.getElementById('bgColorIndicator');
 const useDitheringCheckbox = document.getElementById('useDithering');
+const ditheringAlgorithmSelect = document.getElementById('ditheringAlgorithm');
+const maxColorsCheckbox = document.getElementById('useMaxColors');
+const maxColorsInput = document.getElementById('maxColors');
+const maxColorsValue = document.getElementById('maxColorsValue');
+const maxColorsControl = document.getElementById('maxColorsControl');
 
 // Zoom controls
 const zoomControls = document.getElementById('zoomControls');
@@ -132,7 +137,7 @@ function detectBackgroundColor(imageData) {
 
 // ===== Pattern Generation =====
 
-async function convertToPattern(imageData, gridSize, removeBackground, backgroundColor, tolerance, useDithering = false) {
+async function convertToPattern(imageData, gridSize, removeBackground, backgroundColor, tolerance, useDithering = false, ditheringAlgorithm = 'floyd-steinberg') {
     const { data, width, height } = imageData;
     const aspectRatio = height / width;
     const gridWidth = gridSize;
@@ -170,7 +175,7 @@ async function convertToPattern(imageData, gridSize, removeBackground, backgroun
                 colorCounts[dmc.id] = colorCounts[dmc.id] || { ...dmc, count: 0 };
                 colorCounts[dmc.id].count++;
 
-                // Apply Floyd-Steinberg dithering
+                // Apply dithering
                 if (useDithering) {
                     const dmcR = parseInt(dmc.hex.slice(1, 3), 16);
                     const dmcG = parseInt(dmc.hex.slice(3, 5), 16);
@@ -180,11 +185,21 @@ async function convertToPattern(imageData, gridSize, removeBackground, backgroun
                     const errorG = g - dmcG;
                     const errorB = b - dmcB;
 
-                    // Distribute error to neighboring pixels
-                    distributeError(workingData, width, height, sampleX + 1, sampleY, errorR, errorG, errorB, 7/16);
-                    distributeError(workingData, width, height, sampleX - 1, sampleY + 1, errorR, errorG, errorB, 3/16);
-                    distributeError(workingData, width, height, sampleX, sampleY + 1, errorR, errorG, errorB, 5/16);
-                    distributeError(workingData, width, height, sampleX + 1, sampleY + 1, errorR, errorG, errorB, 1/16);
+                    if (ditheringAlgorithm === 'floyd-steinberg') {
+                        // Floyd-Steinberg dithering
+                        distributeError(workingData, width, height, sampleX + 1, sampleY, errorR, errorG, errorB, 7/16);
+                        distributeError(workingData, width, height, sampleX - 1, sampleY + 1, errorR, errorG, errorB, 3/16);
+                        distributeError(workingData, width, height, sampleX, sampleY + 1, errorR, errorG, errorB, 5/16);
+                        distributeError(workingData, width, height, sampleX + 1, sampleY + 1, errorR, errorG, errorB, 1/16);
+                    } else if (ditheringAlgorithm === 'atkinson') {
+                        // Atkinson dithering (lighter, more artistic)
+                        distributeError(workingData, width, height, sampleX + 1, sampleY, errorR, errorG, errorB, 1/8);
+                        distributeError(workingData, width, height, sampleX + 2, sampleY, errorR, errorG, errorB, 1/8);
+                        distributeError(workingData, width, height, sampleX - 1, sampleY + 1, errorR, errorG, errorB, 1/8);
+                        distributeError(workingData, width, height, sampleX, sampleY + 1, errorR, errorG, errorB, 1/8);
+                        distributeError(workingData, width, height, sampleX + 1, sampleY + 1, errorR, errorG, errorB, 1/8);
+                        distributeError(workingData, width, height, sampleX, sampleY + 2, errorR, errorG, errorB, 1/8);
+                    }
                 }
             }
         }
@@ -212,6 +227,132 @@ function distributeError(data, width, height, x, y, errorR, errorG, errorB, fact
     data[idx] = Math.max(0, Math.min(255, data[idx] + errorR * factor));
     data[idx + 1] = Math.max(0, Math.min(255, data[idx + 1] + errorG * factor));
     data[idx + 2] = Math.max(0, Math.min(255, data[idx + 2] + errorB * factor));
+}
+
+function limitColors(pattern, maxColors) {
+    if (maxColors <= 0) return pattern;
+
+    // Get colors sorted by usage
+    const sortedColors = Object.values(pattern.colorCounts)
+        .sort((a, b) => b.count - a.count);
+
+    // If already within limit, no change needed
+    if (sortedColors.length <= maxColors) return pattern;
+
+    // Get top N colors
+    const topColors = sortedColors.slice(0, maxColors);
+    const topColorIds = new Set(topColors.map(c => c.id));
+
+    // Build new color counts
+    const newColorCounts = {};
+    topColors.forEach(c => {
+        newColorCounts[c.id] = { ...c, count: 0 };
+    });
+
+    // Update stitches - replace colors not in top N with closest color from top N
+    const newStitches = pattern.stitches.map(stitch => {
+        if (topColorIds.has(stitch.color.id)) {
+            // Color is in top N, keep it
+            newColorCounts[stitch.color.id].count++;
+            return stitch;
+        } else {
+            // Find closest color from top N
+            const r = parseInt(stitch.color.hex.slice(1, 3), 16);
+            const g = parseInt(stitch.color.hex.slice(3, 5), 16);
+            const b = parseInt(stitch.color.hex.slice(5, 7), 16);
+
+            let closestColor = topColors[0];
+            let minDistance = Infinity;
+
+            for (const color of topColors) {
+                const cr = parseInt(color.hex.slice(1, 3), 16);
+                const cg = parseInt(color.hex.slice(3, 5), 16);
+                const cb = parseInt(color.hex.slice(5, 7), 16);
+
+                const dr = cr - r;
+                const dg = cg - g;
+                const db = cb - b;
+                const distance = dr * dr * 0.3 + dg * dg * 0.59 + db * db * 0.11;
+
+                if (distance < minDistance) {
+                    minDistance = distance;
+                    closestColor = color;
+                }
+            }
+
+            newColorCounts[closestColor.id].count++;
+            return { ...stitch, color: closestColor };
+        }
+    });
+
+    return {
+        ...pattern,
+        stitches: newStitches,
+        colorCounts: newColorCounts
+    };
+}
+
+function calculatePatternStats(stitchCount, colorCount) {
+    // Average stitching speed: 200-300 stitches per hour
+    const stitchesPerHour = 250;
+    const estimatedHours = stitchCount / stitchesPerHour;
+
+    // Difficulty calculation
+    let difficulty = 'Beginner';
+    let difficultyScore = 0;
+
+    // Base difficulty on stitch count
+    if (stitchCount < 2000) {
+        difficultyScore += 1;
+    } else if (stitchCount < 5000) {
+        difficultyScore += 2;
+    } else if (stitchCount < 10000) {
+        difficultyScore += 3;
+    } else if (stitchCount < 20000) {
+        difficultyScore += 4;
+    } else {
+        difficultyScore += 5;
+    }
+
+    // Add difficulty based on color count
+    if (colorCount > 30) {
+        difficultyScore += 2;
+    } else if (colorCount > 20) {
+        difficultyScore += 1;
+    }
+
+    // Determine final difficulty
+    if (difficultyScore <= 2) {
+        difficulty = 'Beginner';
+    } else if (difficultyScore <= 4) {
+        difficulty = 'Easy';
+    } else if (difficultyScore <= 6) {
+        difficulty = 'Intermediate';
+    } else if (difficultyScore <= 8) {
+        difficulty = 'Advanced';
+    } else {
+        difficulty = 'Expert';
+    }
+
+    // Format time estimate
+    let timeEstimate = '';
+    if (estimatedHours < 1) {
+        timeEstimate = `${Math.round(estimatedHours * 60)} min`;
+    } else if (estimatedHours < 10) {
+        timeEstimate = `${estimatedHours.toFixed(1)} hrs`;
+    } else {
+        const days = Math.floor(estimatedHours / 8);
+        const remainingHours = Math.round(estimatedHours % 8);
+        if (days === 0) {
+            timeEstimate = `${Math.round(estimatedHours)} hrs`;
+        } else if (remainingHours === 0) {
+            timeEstimate = `${days} ${days === 1 ? 'day' : 'days'}`;
+        } else {
+            timeEstimate = `${days}d ${remainingHours}h`;
+        }
+    }
+
+    return { difficulty, timeEstimate };
 }
 
 function drawPattern(stitches, gridWidth, gridHeight) {
@@ -421,6 +562,7 @@ async function generatePattern() {
     const removeBackground = removeBackgroundCheckbox.checked;
     const tolerance = parseInt(toleranceInput.value);
     const useDithering = useDitheringCheckbox.checked;
+    const ditheringAlgorithm = ditheringAlgorithmSelect?.value || 'floyd-steinberg';
 
     const result = await convertToPattern(
         currentImageData,
@@ -428,17 +570,34 @@ async function generatePattern() {
         removeBackground,
         backgroundColor,
         tolerance,
-        useDithering
+        useDithering,
+        ditheringAlgorithm
     );
 
-    currentPattern = result;
+    // Apply color limiting if enabled
+    let finalPattern = result;
+    if (maxColorsCheckbox?.checked) {
+        const maxColors = parseInt(maxColorsInput?.value || 20);
+        finalPattern = limitColors(result, maxColors);
+    }
 
-    drawPattern(result.stitches, result.width, result.height);
+    currentPattern = finalPattern;
 
-    document.getElementById('statWidth').textContent = result.width;
-    document.getElementById('statHeight').textContent = result.height;
-    document.getElementById('statStitches').textContent = result.stitches.length.toLocaleString();
-    document.getElementById('statColors').textContent = Object.keys(result.colorCounts).length;
+    drawPattern(finalPattern.stitches, finalPattern.width, finalPattern.height);
+
+    const colorCount = Object.keys(finalPattern.colorCounts).length;
+    const stats = calculatePatternStats(finalPattern.stitches.length, colorCount);
+
+    document.getElementById('statWidth').textContent = finalPattern.width;
+    document.getElementById('statHeight').textContent = finalPattern.height;
+    document.getElementById('statStitches').textContent = finalPattern.stitches.length.toLocaleString();
+    document.getElementById('statColors').textContent = colorCount;
+
+    // Update difficulty and time estimate if elements exist
+    const difficultyElem = document.getElementById('statDifficulty');
+    const timeElem = document.getElementById('statTime');
+    if (difficultyElem) difficultyElem.textContent = stats.difficulty;
+    if (timeElem) timeElem.textContent = stats.timeEstimate;
 
     progress.textContent = '';
     downloadBtn.disabled = false;
@@ -468,6 +627,21 @@ toleranceInput.addEventListener('input', (e) => {
 toleranceInput.addEventListener('change', generatePattern);
 
 useDitheringCheckbox.addEventListener('change', generatePattern);
+
+maxColorsCheckbox?.addEventListener('change', (e) => {
+    if (maxColorsControl) {
+        maxColorsControl.style.display = e.target.checked ? 'block' : 'none';
+    }
+    generatePattern();
+});
+
+maxColorsInput?.addEventListener('input', (e) => {
+    if (maxColorsValue) {
+        maxColorsValue.textContent = e.target.value;
+    }
+});
+
+maxColorsInput?.addEventListener('change', generatePattern);
 
 newImageBtn.addEventListener('click', () => {
     currentImage = null;

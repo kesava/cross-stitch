@@ -1,5 +1,5 @@
 import { html } from '../htm.js';
-import { loadImageData, convertToPattern, generateSVG, generateOpenCrossStitchFormat, detectBackgroundColor } from '../utils/patternGenerator.js';
+import { loadImageData, convertToPattern, generateSVG, generateOpenCrossStitchFormat, detectBackgroundColor, limitColors, mergeColors, generateThreadShoppingList, exportShoppingListText, generatePrintableHTML, applyShapeMask } from '../utils/patternGenerator.js';
 import { Header } from './Header.js';
 import { UploadZone } from './UploadZone.js';
 import { Controls } from './Controls.js';
@@ -26,6 +26,15 @@ export function App() {
     const [backgroundColor, setBackgroundColor] = useState(null);
     const [tolerance, setTolerance] = useState(40);
     const [useDithering, setUseDithering] = useState(false);
+    const [ditheringAlgorithm, setDitheringAlgorithm] = useState('floyd-steinberg');
+    const [useMaxColors, setUseMaxColors] = useState(false);
+    const [maxColors, setMaxColors] = useState(20);
+    const [useMergeColors, setUseMergeColors] = useState(false);
+    const [mergeTolerance, setMergeTolerance] = useState(30);
+    const [showSymbols, setShowSymbols] = useState(false);
+    const [showGridNumbers, setShowGridNumbers] = useState(false);
+    const [showBorder, setShowBorder] = useState(false);
+    const [patternShape, setPatternShape] = useState('rectangle');
 
     // Load sample image on mount
     useEffect(() => {
@@ -59,22 +68,44 @@ export function App() {
             removeBackground,
             backgroundColor,
             tolerance,
-            useDithering
+            useDithering,
+            ditheringAlgorithm
         })
             .then((result) => {
-                const svg = generateSVG(result.stitches, result.width, result.height);
+                // Apply color limiting if enabled
+                let finalResult = result;
+                if (useMaxColors) {
+                    finalResult = limitColors(result, maxColors);
+                }
+
+                // Apply color merging if enabled
+                if (useMergeColors) {
+                    finalResult = mergeColors(finalResult, mergeTolerance);
+                }
+
+                // Apply shape mask if not rectangle
+                if (patternShape !== 'rectangle') {
+                    finalResult = applyShapeMask(finalResult, patternShape);
+                }
+
+                const svg = generateSVG(finalResult.stitches, finalResult.width, finalResult.height, 10, {
+                    showSymbols,
+                    colorCounts: finalResult.colorCounts,
+                    showGridNumbers,
+                    showBorder
+                });
                 setPattern({
                     svg,
-                    stitches: result.stitches,
-                    width: result.width,
-                    height: result.height,
-                    stitchCount: result.stitches.length
+                    stitches: finalResult.stitches,
+                    width: finalResult.width,
+                    height: finalResult.height,
+                    stitchCount: finalResult.stitches.length
                 });
-                setColorCounts(result.colorCounts);
+                setColorCounts(finalResult.colorCounts);
                 setIsConverting(false);
             })
             .catch(console.error);
-    }, [imageData, gridSize, removeBackground, backgroundColor, tolerance, useDithering]);
+    }, [imageData, gridSize, removeBackground, backgroundColor, tolerance, useDithering, ditheringAlgorithm, useMaxColors, maxColors, useMergeColors, mergeTolerance, showSymbols, showGridNumbers, showBorder, patternShape]);
 
     const handleFileSelect = (imageSrc) => {
         setImage(imageSrc);
@@ -89,6 +120,11 @@ export function App() {
         setPattern(null);
         setBackgroundColor(null);
         setRemoveBackground(true);
+    };
+
+    const handleManualBackgroundPick = (color) => {
+        setBackgroundColor(color);
+        setRemoveBackground(true); // Auto-enable background removal when manually picked
     };
 
     const downloadSVG = () => {
@@ -161,6 +197,32 @@ export function App() {
         img.src = url;
     };
 
+    const downloadShoppingList = () => {
+        if (!colorCounts || Object.keys(colorCounts).length === 0) return;
+
+        const shoppingList = generateThreadShoppingList(colorCounts);
+        const text = exportShoppingListText(shoppingList);
+
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'thread-shopping-list.txt';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    };
+
+    const openPrintablePattern = () => {
+        if (!pattern) return;
+
+        const html = generatePrintableHTML(pattern.stitches, pattern.width, pattern.height, colorCounts);
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(html);
+        printWindow.document.close();
+    };
+
     return html`
         <div className="app-container">
             <div className="thread-decoration top-left"></div>
@@ -183,6 +245,24 @@ export function App() {
                         backgroundColor=${backgroundColor}
                         useDithering=${useDithering}
                         onDitheringChange=${setUseDithering}
+                        ditheringAlgorithm=${ditheringAlgorithm}
+                        onDitheringAlgorithmChange=${setDitheringAlgorithm}
+                        useMaxColors=${useMaxColors}
+                        onUseMaxColorsChange=${setUseMaxColors}
+                        maxColors=${maxColors}
+                        onMaxColorsChange=${setMaxColors}
+                        useMergeColors=${useMergeColors}
+                        onUseMergeColorsChange=${setUseMergeColors}
+                        mergeTolerance=${mergeTolerance}
+                        onMergeToleranceChange=${setMergeTolerance}
+                        showSymbols=${showSymbols}
+                        onShowSymbolsChange=${setShowSymbols}
+                        showGridNumbers=${showGridNumbers}
+                        onShowGridNumbersChange=${setShowGridNumbers}
+                        showBorder=${showBorder}
+                        onShowBorderChange=${setShowBorder}
+                        patternShape=${patternShape}
+                        onPatternShapeChange=${setPatternShape}
                     />
 
                     <div className="workspace">
@@ -190,6 +270,7 @@ export function App() {
                             image=${image}
                             pattern=${pattern}
                             colorCounts=${colorCounts}
+                            onManualBackgroundPick=${handleManualBackgroundPick}
                         />
 
                         <${PatternPanel}
@@ -199,6 +280,8 @@ export function App() {
                             onDownload=${downloadSVG}
                             onDownloadOpenFormat=${downloadOpenFormat}
                             onDownloadPNG=${downloadPNG}
+                            onDownloadShoppingList=${downloadShoppingList}
+                            onPrintPDF=${openPrintablePattern}
                         />
                     </div>
                 <//>
